@@ -14,20 +14,17 @@ import java.time.format.DateTimeFormatter;
  * ScreenshotManager — Captures and saves timestamped browser screenshots.
  *
  * <p>Screenshots are saved to a {@code Screenshots/} folder at the project root.
- * The folder is created automatically if it does not already exist.
- * Each file is named using your label and a full timestamp to prevent overwrites:</p>
- *
- * <pre>
- * Screenshots/
- * ├── LoginPage_2025-07-21_14-35-22-123.png
- * └── AfterSubmit_2025-07-21_14-35-45-456.png
- * </pre>
+ * Each file is named using your label and a full timestamp to prevent overwrites.</p>
  *
  * @author ASMahrous
  */
 public class ScreenshotManager
 {
     private final WebDriver browser;
+
+    /** Folder where all screenshots are saved — relative to the project root. */
+    public static final Path SCREENSHOTS_FOLDER =
+            Paths.get(System.getProperty("user.dir"), "Screenshots");
 
     /**
      * @param browser the active WebDriver session
@@ -42,38 +39,41 @@ public class ScreenshotManager
     // ========================
 
     /**
-     * Captures a screenshot of the current browser state and saves it to
-     * {@code Screenshots/} at the project root.
+     * Captures a screenshot of the current browser state, saves it to
+     * {@code Screenshots/} at the project root, and returns the full
+     * {@link Path} of the saved file.
+     *
+     * <p>The returned {@link Path} is consumed by
+     * {@code AllureHelper.saveScreenshot()} to stream the image directly
+     * into the Allure report as an attachment.</p>
      *
      * <p>Example:</p>
      * <pre>{@code
-     * driver.takeScreenshot("LoginPage");
-     * driver.takeScreenshot("AfterSubmit");
+     * Path shot = driver.takeScreenshot("LoginPage");
+     * AllureHelper.saveScreenshot("LoginPage", shot);
      * }</pre>
      *
      * @param screenshotLabel a short label used as the filename prefix
      *                        (e.g., "LoginPage"). Spaces are replaced with
      *                        underscores automatically.
+     * @return the {@link Path} of the saved screenshot file
      * @throws RuntimeException if the screenshot cannot be saved due to an I/O error
      */
-    public void takeScreenshot(String screenshotLabel)
+    public Path takeScreenshot(String screenshotLabel)
     {
-        Path screenshotsDir = Paths.get(System.getProperty("user.dir"), "Screenshots");
-
         try
         {
-            Files.createDirectories(screenshotsDir);
+            Files.createDirectories(SCREENSHOTS_FOLDER);
         }
         catch (IOException e)
         {
-            throw new RuntimeException("Failed to create Screenshots directory: " + screenshotsDir, e);
+            throw new RuntimeException("Failed to create Screenshots directory: " + SCREENSHOTS_FOLDER, e);
         }
 
-        String timestamp     = LocalDateTime.now()
+        String timestamp = LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS"));
         String sanitizedLabel = screenshotLabel.trim().replace(" ", "_");
-        String fileName       = sanitizedLabel + "_" + timestamp + ".png";
-        Path   destination    = screenshotsDir.resolve(fileName);
+        Path destination = SCREENSHOTS_FOLDER.resolve(sanitizedLabel + "_" + timestamp + ".png");
 
         File sourceFile = ((TakesScreenshot) browser).getScreenshotAs(OutputType.FILE);
         try
@@ -85,5 +85,7 @@ public class ScreenshotManager
         {
             throw new RuntimeException("Failed to save screenshot to: " + destination, e);
         }
+
+        return destination;
     }
 }

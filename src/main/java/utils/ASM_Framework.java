@@ -3,6 +3,7 @@ package utils;
 import org.openqa.selenium.*;
 import utils.framework.*;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
@@ -531,8 +532,8 @@ public class ASM_Framework
     // ========================
 
     /** @see ScreenshotManager#takeScreenshot(String) */
-    public void takeScreenshot(String screenshotLabel)
+    public Path takeScreenshot(String screenshotLabel)
     {
-        screenshotManager.takeScreenshot(screenshotLabel);
+        return screenshotManager.takeScreenshot(screenshotLabel);
     }
 }

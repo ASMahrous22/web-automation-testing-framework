@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+╔══════════════════════════════════════════════════════════════════╗
+║              AutomationExercise.com — TestNG Suite               ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Run all tests  :  mvn test                                      ║
+║  View report    :  mvn allure:serve                              ║
+╚══════════════════════════════════════════════════════════════════╝
+
+HOW TO ADD A NEW TEST CLASS
+────────────────────────────
+1. Create YourTests.java in src/test/java/tests/ extending BaseTest
+2. Copy the <test> block template below and fill in your class name
+3. Save — Maven will pick it up on the next `mvn test`
+
+TEMPLATE:
+    <test name="Your Feature Tests">
+        <classes>
+            <class name="tests.YourTests"/>
+        </classes>
+    </test>
+
+HOW TO SKIP A TEST CLASS TEMPORARILY
+──────────────────────────────────────
+Wrap the <test> block in a comment:
+    <!-
+    <test name="Cart Tests">
+        <classes>
+            <class name="tests.CartTests"/>
+        </classes>
+    </test>
+    - - >    ← remove the spaces between - - > to close the comment
+
+HOW TO RUN SPECIFIC METHODS ONLY
+──────────────────────────────────
+    <test name="Login Tests">
+        <classes>
+            <class name="tests.LoginTests">
+                <methods>
+                    <include name="loginWithValidCredentials"/>
+                    <include name="verifyLoginPageIsVisible"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+-->
+
+<suite name="AutomationExercise Test Suite" verbose="1">
+
+    <!--
+        Add your <test> blocks here as you create each test class.
+        Example — uncomment and fill in when ready:
+
+    <test name="Login Tests">
+        <classes>
+            <class name="tests.LoginTests"/>
+        </classes>
+    </test>
+
+    <test name="Register Tests">
+        <classes>
+            <class name="tests.RegisterTests"/>
+        </classes>
+    </test>
+
+    <test name="Product Tests">
+        <classes>
+            <class name="tests.ProductTests"/>
+        </classes>
+    </test>
+
+    <test name="Cart Tests">
+        <classes>
+            <class name="tests.CartTests"/>
+        </classes>
+    </test>
+
+    <test name="Checkout Tests">
+        <classes>
+            <class name="tests.CheckoutTests"/>
+        </classes>
+    </test>
+    -->
+
+</suite>
