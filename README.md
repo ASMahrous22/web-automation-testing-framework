@@ -114,7 +114,7 @@ Parent class for all your page objects. Has two constructors:
 
 ```java
 // Used in tests — share the driver BaseTest already created
-new LoginPage(driver);
+new LoginPage(getDriver());
 
 // Standalone — page boots its own browser, useful for debugging
 new LoginPage("chrome");
@@ -146,7 +146,7 @@ Parent class for all your test classes. Manages the TestNG lifecycle:
   `AllureHelper.saveScreenshot()` to capture and attach the screenshot to Allure.
   Always: closes the browser
 
-The `driver` field is `protected` so every test subclass passes it to page constructors.
+The `getDriver()` method returns the ThreadLocal-isolated driver so every test subclass passes it to page constructors.
 
 ---
 
@@ -334,7 +334,7 @@ public class LoginPage extends BasePage
 
 1. Create a new `.java` file in `src/test/java/tests/`
 2. Extend `BaseTest`
-3. Use the inherited `driver` field to instantiate page objects
+3. Use the `getDriver()` method to instantiate page objects
 4. Annotate each test with `@Test` and `@Description`
 5. Register the class in `testng.xml`
 
@@ -364,13 +364,13 @@ public class LoginTests extends BaseTest
         // 1. Load test data
         UserData user = DataReader.read("users.json", UserData.class);
 
-        // 2. Instantiate the page — pass the inherited driver from BaseTest
-        LoginPage loginPage = new LoginPage(driver);
+        // 2. Instantiate the page — call getDriver() — the ThreadLocal-backed driver from BaseTest
+        LoginPage loginPage = new LoginPage(getDriver());
         loginPage.open();
         loginPage.login(user.email, user.password);
 
         // 3. Manual screenshot checkpoint — saved to disk AND attached to Allure
-        loginPage.saveScreenshot("TC01_AfterLogin", driver);
+        loginPage.saveScreenshot("TC01_AfterLogin", getDriver());
 
         // 4. Assert
         Assert.assertTrue(
@@ -385,7 +385,7 @@ public class LoginTests extends BaseTest
     @Severity(SeverityLevel.NORMAL)
     public void loginWithInvalidCredentials()
     {
-        LoginPage loginPage = new LoginPage(driver);
+        LoginPage loginPage = new LoginPage(getDriver());
         loginPage.open();
         loginPage.login("wrong@email.com", "wrongpassword");
 
@@ -401,7 +401,7 @@ public class LoginTests extends BaseTest
     @Severity(SeverityLevel.MINOR)
     public void verifyLoginPageIsVisible()
     {
-        LoginPage loginPage = new LoginPage(driver);
+        LoginPage loginPage = new LoginPage(getDriver());
         loginPage.open();
 
         Assert.assertTrue(loginPage.isAt(), "URL should contain 'login'");
@@ -717,7 +717,7 @@ driver.switchToParentFrame();        // exit one level up (nested iframes)
 ### Screenshots
 ```java
 // From a page object or test — saves to disk AND attaches to Allure
-loginPage.saveScreenshot("TC01_AfterLogin", driver);
+loginPage.saveScreenshot("TC01_AfterLogin", getDriver());
 
 // From BaseTest tearDown — happens automatically on any test failure
 // FAILED_<testMethodName>_<timestamp>.png
@@ -727,5 +727,5 @@ loginPage.saveScreenshot("TC01_AfterLogin", driver);
 
 ## Author
 
-**ASMahrous** — Built as part of the EDGES Software Testing Diploma web automation final project.
+**ASMahrous** — Built as part of the EDGES Software Testing Diploma automation final project.
 Feel free to fork, use, or contribute!
