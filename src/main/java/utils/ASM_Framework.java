@@ -123,6 +123,31 @@ public class ASM_Framework
         screenshotManager   = new ScreenshotManager(driver);
     }
 
+     // ========================
+    // Raw WebDriver Access
+    // ========================
+ 
+    /**
+     * Returns the underlying raw {@link WebDriver} instance.
+     *
+     * <p>Use this only when you need to call a WebDriver API that is not
+     * wrapped by this framework — for example, casting to
+     * {@link JavascriptExecutor} to run JavaScript directly:</p>
+     * <pre>{@code
+     * JavascriptExecutor js = (JavascriptExecutor) driver.getDriver();
+     * js.executeScript("arguments[0].click();", element);
+     * }</pre>
+     *
+     * <p>For all standard interactions (click, type, wait, navigate…) prefer
+     * the framework methods on this class so waits are applied consistently.</p>
+     *
+     * @return the active {@link WebDriver} session
+     */
+    public WebDriver getDriver()
+    {
+        return browserManager.getDriver();
+    }
+    
     // ========================
     // Browser Management
     // ========================
