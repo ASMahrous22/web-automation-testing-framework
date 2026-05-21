@@ -327,43 +327,42 @@ public class BrowserManager
         for (String arg : opts.extraArguments)
             chromeOptions.addArguments(arg);
 
-        // ── Suppress Chrome UI overlays that interrupt test execution ─────
-        //
-        // 1. "Save password?" / "Save or update password?" bubble.
-        //    The command-line flag alone is not always sufficient in newer
-        //    Chrome versions, so we combine it with the profile prefs.
+        // ── Suppress ALL Chrome UI overlays and ads ──────────────────────
+
+        // Block ads and popups at the browser level using Chrome's built-in
+        // content settings — no extension needed, no iframe hunting in tests.
         chromeOptions.addArguments("--disable-save-password-bubble");
-
-        // 2. "Sign in to Chrome" / sync prompts.
         chromeOptions.addArguments("--disable-sync");
-
-        // 3. First-run / welcome screen.
         chromeOptions.addArguments("--no-first-run");
         chromeOptions.addArguments("--no-default-browser-check");
+        chromeOptions.addArguments("--disable-extensions");
+        chromeOptions.addArguments("--disable-popup-blocking");
 
-        // 4. Profile prefs — the most reliable way to permanently disable
-        //    the password manager bubble, the address/payment save popups,
-        //    and the notifications prompt.
         Map<String, Object> prefs = new HashMap<>();
 
-        // Disable the password-save prompt entirely
+        // Password / autofill popups
         prefs.put("credentials_enable_service", false);
         prefs.put("profile.password_manager_enabled", false);
-
-        // Disable the "Save address?" popup (autofill for addresses & phone numbers).
-        // Chrome shows this after any form submission that contains address fields.
-        // Setting autofill enabled = false suppresses both the save prompt and
-        // the "Update address?" variant that appears on repeat submissions.
         prefs.put("autofill.profile_enabled", false);
-
-        // Disable the "Save card?" / "Save payment method?" popup as well,
-        // since the checkout tests fill in card details and would trigger it.
         prefs.put("autofill.credit_card_enabled", false);
 
-        // Block desktop notification permission prompts (0=ask, 1=allow, 2=block)
+        // Notifications
         prefs.put("profile.default_content_setting_values.notifications", 2);
 
+        // Block all ads — set every ad-related content setting to BLOCK (2).
+        // This prevents Google AdSense iframes from rendering entirely, so
+        // they never appear on top of page elements during tests.
+        prefs.put("profile.default_content_setting_values.ads", 2);
+        prefs.put("profile.default_content_setting_values.popups", 2);
+        prefs.put("profile.default_content_setting_values.mixed_script", 2);
+
         chromeOptions.setExperimentalOption("prefs", prefs);
+
+        // Exclude the "enable-automation" switch that some sites detect
+        // and use to serve different (heavier ad) content to bots.
+        chromeOptions.setExperimentalOption("excludeSwitches",
+                java.util.Arrays.asList("enable-automation"));
+        chromeOptions.setExperimentalOption("useAutomationExtension", false);
 
         return chromeOptions;
     }
