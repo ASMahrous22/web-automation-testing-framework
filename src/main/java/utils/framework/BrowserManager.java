@@ -10,7 +10,9 @@ import org.openqa.selenium.firefox.FirefoxOptions;
 import org.openqa.selenium.safari.SafariDriver;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * BrowserManager — Manages browser lifecycle, navigation, and window size.
@@ -18,6 +20,21 @@ import java.util.List;
  * <p>Responsible for launching the correct browser driver, providing
  * page-level navigation (URL, back/forward/refresh), controlling
  * the window size, and closing the session.</p>
+ *
+ * <p><b>Chrome-specific suppressions applied automatically:</b></p>
+ * <ul>
+ *   <li>"Save password?" bubble — suppressed via the
+ *       {@code credentials_enable_service} and
+ *       {@code profile.password_manager_enabled} prefs, and the
+ *       {@code --disable-save-password-bubble} flag.</li>
+ *   <li>"Save or update password?" popup — same prefs block both variants.</li>
+ *   <li>Desktop notifications permission prompt —
+ *       suppressed via the {@code profile.default_content_setting_values.notifications}
+ *       pref (value {@code 2} = block).</li>
+ * </ul>
+ * <p>These suppressions are applied unconditionally so tests are never
+ * interrupted by Chrome UI overlays regardless of which
+ * {@link BrowserOptions} the caller passes.</p>
  *
  * @author ASMahrous
  */
@@ -295,6 +312,7 @@ public class BrowserManager
     {
         ChromeOptions chromeOptions = new ChromeOptions();
 
+        // ── Window / display ─────────────────────────────────────────────
         if (opts.kiosk)
             chromeOptions.addArguments("--kiosk");
         else if (opts.headless)
@@ -308,6 +326,44 @@ public class BrowserManager
 
         for (String arg : opts.extraArguments)
             chromeOptions.addArguments(arg);
+
+        // ── Suppress Chrome UI overlays that interrupt test execution ─────
+        //
+        // 1. "Save password?" / "Save or update password?" bubble.
+        //    The command-line flag alone is not always sufficient in newer
+        //    Chrome versions, so we combine it with the profile prefs.
+        chromeOptions.addArguments("--disable-save-password-bubble");
+
+        // 2. "Sign in to Chrome" / sync prompts.
+        chromeOptions.addArguments("--disable-sync");
+
+        // 3. First-run / welcome screen.
+        chromeOptions.addArguments("--no-first-run");
+        chromeOptions.addArguments("--no-default-browser-check");
+
+        // 4. Profile prefs — the most reliable way to permanently disable
+        //    the password manager bubble, the address/payment save popups,
+        //    and the notifications prompt.
+        Map<String, Object> prefs = new HashMap<>();
+
+        // Disable the password-save prompt entirely
+        prefs.put("credentials_enable_service", false);
+        prefs.put("profile.password_manager_enabled", false);
+
+        // Disable the "Save address?" popup (autofill for addresses & phone numbers).
+        // Chrome shows this after any form submission that contains address fields.
+        // Setting autofill enabled = false suppresses both the save prompt and
+        // the "Update address?" variant that appears on repeat submissions.
+        prefs.put("autofill.profile_enabled", false);
+
+        // Disable the "Save card?" / "Save payment method?" popup as well,
+        // since the checkout tests fill in card details and would trigger it.
+        prefs.put("autofill.credit_card_enabled", false);
+
+        // Block desktop notification permission prompts (0=ask, 1=allow, 2=block)
+        prefs.put("profile.default_content_setting_values.notifications", 2);
+
+        chromeOptions.setExperimentalOption("prefs", prefs);
 
         return chromeOptions;
     }
