@@ -348,4 +348,26 @@ public class WaitManager
         return new WebDriverWait(browser, Duration.ofSeconds(timeInSeconds))
                 .until(ExpectedConditions.alertIsPresent());
     }
+
+    // ========================
+    // URL / Navigation Waits
+    // ========================
+    /**
+     * Waits until the current page URL contains the given substring.
+     *
+     * <p>Use this after a navigation‑bound action (e.g., clicking a link,
+     * submitting a form) to ensure the browser has actually moved to the
+     * expected page before proceeding.</p>
+     *
+     * @param expectedUrl a substring that must appear in the URL
+     *                             (e.g., {@code "/product_details/"} or {@code "checkout"})
+     * @param timeInSeconds       maximum time to wait in seconds
+     * @throws TimeoutException if the URL does not contain the substring
+     *                          within the given timeout
+     */
+    public void waitForUrlToBe(String expectedUrl, long timeInSeconds)
+    {
+        new WebDriverWait(browser, Duration.ofSeconds(timeInSeconds))
+                .until(ExpectedConditions.urlContains(expectedUrl));
+    }
 }
