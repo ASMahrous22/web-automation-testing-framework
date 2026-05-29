@@ -561,4 +561,14 @@ public class ASM_Framework
     {
         return screenshotManager.takeScreenshot(screenshotLabel);
     }
+
+    // ========================
+    // Click + Navigation Wait
+    // ========================
+
+    /** @see ElementInteractions#clickAndWaitForUrl(By, String, long) */
+    public void clickAndWaitForUrl(By locator, String expectedUrlSubstring, long timeoutSeconds)
+    {
+        elementInteractions.clickAndWaitForUrl(locator, expectedUrlSubstring, timeoutSeconds);
+    }
 }
