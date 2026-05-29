@@ -49,6 +49,34 @@ public class ElementInteractions
     }
 
     // ========================
+    // Click + Navigation Wait
+    // ========================
+    /**
+     * Clicks an element, then waits for the current URL to contain the expected substring.
+     *
+     * <p>Use this method when a click is expected to trigger a page navigation
+     * (e.g., a link, a "View Product" button, a submit button that leads to a new page).
+     * It delegates to the standard {@link #clickElement(By)} and then calls
+     * {@link WaitManager#waitForUrlToBe(String, long)} to confirm the navigation.</p>
+     *
+     * <p>This method does <b>not</b> replace regular {@link #clickElement(By)} –
+     * only use it for navigation‑bound clicks. For modals, JavaScript actions,
+     * or elements that do not trigger a full page load, continue using
+     * {@code clickElement}.</p>
+     *
+     * @param locator              the By locator of the element to click
+     * @param expectedUrlSubstring a substring that must appear in the URL after navigation
+     * @param timeoutSeconds       maximum time to wait for the URL to contain the substring
+     * @throws TimeoutException if the URL does not contain the expected substring
+     *                          within the given timeout
+     */
+    public void clickAndWaitForUrl(By locator, String expectedUrlSubstring, long timeoutSeconds)
+    {
+        clickElement(locator);
+        waitManager.waitForUrlToBe(expectedUrlSubstring, timeoutSeconds);
+    }
+
+    // ========================
     // Write / Clear
     // ========================
 
