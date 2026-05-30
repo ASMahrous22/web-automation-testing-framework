@@ -70,6 +70,7 @@ web-automation-testing-framework/
 │       │   │   └── ...                           ← your test classes go here
 │       │   │
 │       │   └── utils/
+│       │       ├── AdsHelper.java                ← ad-killing, safe-click, wait helpers
 │       │       ├── AllureHelper.java             ← screenshot → Allure attachment
 │       │       └── DataReader.java               ← JSON test data reader (Gson)
 │       │
@@ -99,13 +100,16 @@ managers behind one clean API:
 | `BrowserManager` | Launch browser, navigate, window size, close |
 | `WaitManager` | Implicit, explicit, and fluent waits |
 | `ElementFinder` | Locate elements by id / name / class / xpath / css |
-| `ElementInteractions` | Click, type, clear, get text, check state |
+| `ElementInteractions` | Click, type, clear, get text, state checks |
 | `ActionsManager` | Hover, double-click, right-click, drag-drop, scroll, checkbox, radio |
 | `DropdownManager` | Select / deselect by index, value, text, partial text |
 | `WindowManager` | Switch tabs and windows, get handles, close windows |
 | `AlertManager` | Accept, dismiss, read, type into JS dialogs |
 | `FrameManager` | Switch into and out of iframes |
 | `ScreenshotManager` | Capture timestamped PNG, save to `Screenshots/`, return `Path` |
+
+`ASM_Framework` also re-exports `BrowserManager.BrowserOptions` as
+`ASM_Framework.BrowserOptions` so callers never need an extra import.
 
 ---
 
@@ -121,11 +125,18 @@ new LoginPage("chrome");
 ```
 
 The `driver` field is `public` so every page subclass accesses the full
-`ASM_Framework` API directly. The only methods `BasePage` defines are things
-that either don't exist on `driver` or meaningfully combine calls:
+`ASM_Framework` API directly. `BasePage` also provides ad-safe primitives
+(backed by `AdsHelper`) and a set of convenience methods:
 
 | Method | What it does |
 |---|---|
+| `wd()` | Returns the raw `WebDriver` instance |
+| `jsClick(locator)` | Kills ads then clicks via JavaScript — use for nav/navbar links |
+| `jsClick(element)` | JS click on a `WebElement` reference directly |
+| `safeClick(locator)` | Kills ads + regular click with retry; JS click as last resort |
+| `waitFor(locator)` | Kills ads then waits for element visibility |
+| `waitAndGet(locator)` | Kills ads, waits, and returns the `WebElement` |
+| `killAds()` | Removes ad/overlay DOM nodes — call before writing into a field |
 | `readPageURL()` | Returns the current page URL |
 | `urlContains(fragment)` | Checks if the current URL contains a substring |
 | `titleContains(text)` | Checks if the page title contains a substring |
@@ -138,15 +149,52 @@ frames — is accessed directly through `driver` inside each page subclass.
 ---
 
 ### `BaseTest` — `src/test/java/tests/`
-Parent class for all your test classes. Manages the TestNG lifecycle:
+Parent class for all your test classes. Manages the full TestNG lifecycle
+and is safe for **parallel test execution** at any level via a `ThreadLocal`
+driver:
+
+```
+@BeforeSuite  suiteStart()           ← once when `mvn test` begins
+
+  @BeforeClass  classSetUp()         ← once when CartTests starts
+    @BeforeMethod  setUp()           ← fresh browser for every @Test
+      @Test  yourTestMethod()
+    @AfterMethod   tearDown()        ← screenshot on failure + quit browser
+  @AfterClass   classTearDown()      ← once when CartTests finishes
+
+  ... repeats for every test class ...
+
+@AfterSuite   suiteEnd()             ← once when all classes finish
+```
 
 - **`@BeforeMethod setUp()`** — reads `config.properties`, creates `ASM_Framework`,
-  maximizes the window, navigates to `base.url` before every `@Test`
+  maximizes the window, and navigates to `base.url` before every `@Test`.
 - **`@AfterMethod tearDown(ITestResult)`** — on failure: calls
   `AllureHelper.saveScreenshot()` to capture and attach the screenshot to Allure.
-  Always: closes the browser
+  Always: navigates to `about:blank` to drain pending ad requests,
+  calls `closeAllTabs()`, and removes the driver from thread-local to prevent
+  memory leaks.
 
-The `getDriver()` method returns the ThreadLocal-isolated driver so every test subclass passes it to page constructors.
+`getDriver()` returns the `ThreadLocal`-isolated driver — always pass it to
+page constructors from test classes.
+
+---
+
+### `AdsHelper` — `src/test/java/utils/`
+Centralises all ad-killing, safe-click, and wait logic needed to interact
+reliably with ad-heavy sites like `automationexercise.com`. Every method in
+`BasePage` that touches the DOM goes through `AdsHelper` first.
+
+```java
+AdsHelper.killAds(driver);                  // strips ad/vignette DOM nodes
+AdsHelper.jsClick(driver, locator);         // JS click that bypasses any overlay
+AdsHelper.killAdsAndClick(driver, locator); // regular click with retry, JS fallback
+AdsHelper.waitForElement(driver, locator);  // waits up to 15s, killing ads between polls
+AdsHelper.waitForElementAndGet(driver, locator); // same but returns the element
+AdsHelper.dismissBrowserPopups(driver);     // sends ESC to dismiss "Save password?" bubbles
+```
+
+No `Thread.sleep` — all timing is driven by `WebDriverWait`.
 
 ---
 
@@ -252,6 +300,7 @@ String url = getConfig("base.url");
 3. Declare locators as `private final By` fields
 4. Add an `open()` method that navigates to the page
 5. Add one method per user action — no assertions inside page methods
+6. Use `jsClick()` for navbar/anchor links; use `safeClick()` for form buttons
 
 ### Full Example — `LoginPage.java`
 
@@ -297,21 +346,24 @@ public class LoginPage extends BasePage
     // ── Actions ───────────────────────────────────────────────────────────
     public void login(String email, String password)
     {
+        killAds();
         driver.writeInElement(emailField, email);
         driver.writeInElement(passwordField, password);
-        driver.clickElement(loginButton);
+        safeClick(loginButton);
     }
 
     public void signUp(String name, String email)
     {
+        killAds();
         driver.writeInElement(signupName, name);
         driver.writeInElement(signupEmail, email);
-        driver.clickElement(signupButton);
+        safeClick(signupButton);
     }
 
     // ── Data Retrieval (let the test assert, not the page) ────────────────
     public String getErrorMessage()
     {
+        waitFor(errorMessage);
         return driver.getElementText(errorMessage);
     }
 
@@ -326,6 +378,7 @@ public class LoginPage extends BasePage
 - Locators are `private final` — never expose `By` fields publicly
 - Page methods never contain assertions — return data, let the test assert
 - Both constructors must call `super(...)` — that's what wires up `driver`
+- Use `jsClick()` for navbar links, `safeClick()` for form buttons, `killAds()` before typing
 - One file per page — `LoginPage`, `ProductsPage`, `CartPage`, etc.
 
 ---
@@ -334,7 +387,7 @@ public class LoginPage extends BasePage
 
 1. Create a new `.java` file in `src/test/java/tests/`
 2. Extend `BaseTest`
-3. Use the `getDriver()` method to instantiate page objects
+3. Use `getDriver()` to instantiate page objects
 4. Annotate each test with `@Test` and `@Description`
 5. Register the class in `testng.xml`
 
@@ -364,7 +417,7 @@ public class LoginTests extends BaseTest
         // 1. Load test data
         UserData user = DataReader.read("users.json", UserData.class);
 
-        // 2. Instantiate the page — call getDriver() — the ThreadLocal-backed driver from BaseTest
+        // 2. Instantiate the page — getDriver() returns the ThreadLocal driver from BaseTest
         LoginPage loginPage = new LoginPage(getDriver());
         loginPage.open();
         loginPage.login(user.email, user.password);
@@ -418,7 +471,7 @@ public class LoginTests extends BaseTest
 ```
 
 **Rules:**
-- `driver` comes from `BaseTest` — never create `ASM_Framework` manually in a test
+- `driver` comes from `BaseTest` via `getDriver()` — never create `ASM_Framework` manually in a test
 - Every `@Test` method creates its own page object — no shared state between tests
 - `@BeforeMethod` and `@AfterMethod` are handled by `BaseTest` — do not override
   them unless you call `super.setUp()` / `super.tearDown(result)` first
@@ -611,8 +664,8 @@ Screenshots/
 ## Framework API Reference
 
 Everything below is accessed through the `driver` field (inherited from `BasePage`
-in page classes, or from `BaseTest` in test classes). Waits are handled internally
-— never add `Thread.sleep()`.
+in page classes, or via `getDriver()` in test classes). Waits are handled
+internally — never add `Thread.sleep()`.
 
 ### Navigation
 ```java
@@ -621,6 +674,14 @@ driver.manageNavigationButtons("back");     // "back" | "forward" | "refresh"
 driver.getCurrentPageTitle();
 driver.getCurrentPageURL();
 driver.manageScreenSize("maximize");        // "maximize" | "minimize" | fullscreen
+```
+
+### Raw WebDriver Access
+```java
+// Use only when you need a WebDriver API not wrapped by the framework
+WebDriver wd = driver.getDriver();
+JavascriptExecutor js = (JavascriptExecutor) driver.getDriver();
+js.executeScript("arguments[0].click();", element);
 ```
 
 ### Finding Elements
@@ -641,6 +702,13 @@ driver.getElementText(locator);
 driver.getElementText(element);
 ```
 
+### Click + Navigation Wait
+```java
+// Clicks the element then waits for the URL to contain the expected substring.
+// Use only for navigation-bound clicks (links, submit buttons that load a new page).
+driver.clickAndWaitForUrl(locator, "/product_details/", 10);
+```
+
 ### Element State
 ```java
 driver.validateElementIsDisplayed(element);   // returns boolean
@@ -655,6 +723,7 @@ driver.setExplicitWait(locator, Duration.ofSeconds(15));
 driver.setFluentWait(locator, 10, 500, "Timeout message");       // poll every 500ms for 10s
 driver.setImplicitWait(5);                                       // global implicit wait (seconds)
 driver.setImplicitWait(Duration.ofSeconds(5));
+driver.setImplicitWait("seconds", 5);                            // human-readable unit overload
 ```
 
 ### Dropdowns
@@ -714,6 +783,22 @@ driver.switchToDefaultContent();     // exit iframe back to main page
 driver.switchToParentFrame();        // exit one level up (nested iframes)
 ```
 
+### Browser Options
+```java
+ASM_Framework.BrowserOptions opts = new ASM_Framework.BrowserOptions()
+    .headless()                            // no visible window — for CI
+    .maximized()                           // launch maximized
+    .kiosk()                               // borderless fullscreen (takes precedence over headless)
+    .withUserDataDir("/path/to/profile")   // load a specific Chrome profile
+    .withArgument("--disable-notifications");
+
+ASM_Framework driver = new ASM_Framework("chrome", opts);
+```
+
+Chrome also automatically suppresses: "Save password?" bubbles, desktop
+notification prompts, ad iframes, and the Google vignette overlay — no
+extra configuration needed.
+
 ### Screenshots
 ```java
 // From a page object or test — saves to disk AND attaches to Allure
@@ -721,6 +806,17 @@ loginPage.saveScreenshot("TC01_AfterLogin", getDriver());
 
 // From BaseTest tearDown — happens automatically on any test failure
 // FAILED_<testMethodName>_<timestamp>.png
+```
+
+### Ad-Safe Primitives (from `BasePage` subclasses)
+```java
+jsClick(locator);        // kill ads + JS click — use for navbar / anchor links
+jsClick(element);        // JS click on a WebElement directly
+safeClick(locator);      // kill ads + regular click with retry; JS click fallback
+waitFor(locator);        // kill ads then wait for element visibility
+waitAndGet(locator);     // kill ads, wait, and return the WebElement
+killAds();               // remove ad/overlay DOM nodes — call before typing
+wd();                    // returns the raw WebDriver for direct Selenium calls
 ```
 
 ---
