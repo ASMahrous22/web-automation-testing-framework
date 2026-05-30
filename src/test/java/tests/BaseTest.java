@@ -1,8 +1,13 @@
 package tests;
 
+import io.qameta.allure.Allure;
 import org.testng.ITestResult;
+import org.testng.annotations.AfterClass;
 import org.testng.annotations.AfterMethod;
+import org.testng.annotations.AfterSuite;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.BeforeSuite;
 import utils.ASM_Framework;
 import utils.AllureHelper;
 
@@ -16,62 +21,32 @@ import java.util.Properties;
  * <p>Manages the full test lifecycle and is safe for parallel test execution
  * at any level (methods, classes, or suites) via a {@link ThreadLocal} driver.</p>
  *
- * <h3>Why ThreadLocal?</h3>
- * <p>Each thread gets its own isolated {@link ASM_Framework} instance stored in
- * {@code DRIVER_THREAD_LOCAL}. This prevents threads from sharing or overwriting
- * each other's browser session when tests run in parallel.</p>
+ * <h3>Lifecycle order for the entire suite run:</h3>
+ * <pre>
+ *   @BeforeSuite  suiteStart()               ← once when `mvn test` begins
  *
- * <h3>Lifecycle:</h3>
- * <ul>
- *   <li>{@link #setUp()} — creates a new {@link ASM_Framework} for the current
- *       thread, maximizes the window, and navigates to the base URL</li>
- *   <li>{@link #tearDown(ITestResult)} — on failure captures a screenshot and
- *       attaches it to Allure; always quits the browser and removes the driver
- *       from the thread-local to prevent memory leaks</li>
- * </ul>
+ *     @BeforeClass  classSetUp()             ← once when CartTests starts
+ *       @BeforeMethod  setUp()               ← fresh browser for every @Test
+ *         @Test  yourTestMethod()
+ *       @AfterMethod   tearDown()            ← screenshot + quit browser
+ *     @AfterClass   classTearDown()          ← once when CartTests finishes
  *
- * <h3>Accessing the driver in test subclasses:</h3>
- * <pre>{@code
- * public class LoginTests extends BaseTest {
+ *     @BeforeClass  classSetUp()             ← once when CheckoutTests starts
+ *       ... and so on for every test class
+ *     @AfterClass   classTearDown()
  *
- *     @Test
- *     public void loginWithValidCredentials() throws IOException {
- *         LoginPage loginPage = new LoginPage(getDriver());
- *         loginPage.open();
- *         loginPage.login("user@example.com", "secret");
- *         loginPage.saveScreenshot("TC01_AfterLogin", getDriver());
- *
- *         assertTrue(loginPage.urlContains("dashboard"));
- *     }
- * }
- * }</pre>
- *
- * <h3>Enabling parallel execution in testng.xml:</h3>
- * <pre>{@code
- * <suite name="Suite" parallel="methods" thread-count="3">
- *     <test name="Login Tests">
- *         <classes>
- *             <class name="tests.LoginTests"/>
- *         </classes>
- *     </test>
- * </suite>
- * }</pre>
+ *   @AfterSuite   suiteEnd()                 ← once when all classes finish
+ * </pre>
  *
  * @author ASMahrous
  */
 public class BaseTest
 {
-    /**
-     * Thread-local storage for the driver — each thread gets its own
-     * isolated {@link ASM_Framework} instance, making parallel execution safe.
-     *
-     * <p>Always access via {@link #getDriver()} — never reference this field
-     * directly from subclasses.</p>
-     */
     private static final ThreadLocal<ASM_Framework> DRIVER_THREAD_LOCAL = new ThreadLocal<>();
-
-    /** Loaded once at class-load time — read-only, so thread-safe as static. */
     private static final Properties CONFIG = loadConfig();
+
+    /** Tracks suite start time so @AfterSuite can print total duration. */
+    private static long suiteStartTimeMs;
 
     // ========================
     // Config
@@ -107,11 +82,6 @@ public class BaseTest
     /**
      * Returns the {@link ASM_Framework} instance for the current thread.
      *
-     * <p>Use this in every test subclass instead of a raw field reference:</p>
-     * <pre>{@code
-     * LoginPage loginPage = new LoginPage(getDriver());
-     * }</pre>
-     *
      * @return the current thread's driver instance
      * @throws IllegalStateException if called before {@link #setUp()} has run
      */
@@ -125,15 +95,111 @@ public class BaseTest
     }
 
     // ========================
-    // Lifecycle
+    // Suite-level Lifecycle
+    // ========================
+
+    /**
+     * Runs exactly once before any test class or method in the entire suite.
+     *
+     * <p>Prints the full environment configuration so the console log
+     * has a single clear header for the whole run.</p>
+     */
+    @BeforeSuite
+    public void suiteStart()
+    {
+        suiteStartTimeMs = System.currentTimeMillis();
+
+        String browser  = CONFIG.getProperty("browser",  "chrome");
+        String baseUrl  = CONFIG.getProperty("base.url", "https://automationexercise.com");
+        String headless = CONFIG.getProperty("headless", "false");
+
+        System.out.println("\n╔══════════════════════════════════════════════════════════════╗");
+        System.out.println(  "║          AutomationExercise — Full Test Suite                ║");
+        System.out.println(  "╠══════════════════════════════════════════════════════════════╣");
+        System.out.printf(   "║  Browser  : %-49s║%n", browser + " (headless=" + headless + ")");
+        System.out.printf(   "║  Base URL : %-49s║%n", baseUrl);
+        System.out.printf(   "║  Started  : %-49s║%n", new java.util.Date());
+        System.out.println(  "╚══════════════════════════════════════════════════════════════╝\n");
+    }
+
+    /**
+     * Runs exactly once after every test class and method in the suite has finished.
+     *
+     * <p>Prints total elapsed time so you know immediately how long the
+     * full 28-test run took without digging through Maven output.</p>
+     */
+    @AfterSuite
+    public void suiteEnd()
+    {
+        long elapsedSec = (System.currentTimeMillis() - suiteStartTimeMs) / 1000;
+        long minutes    = elapsedSec / 60;
+        long seconds    = elapsedSec % 60;
+
+        System.out.println("\n╔══════════════════════════════════════════════════════════════╗");
+        System.out.println(  "║          AutomationExercise — Suite Completed                ║");
+        System.out.println(  "╠══════════════════════════════════════════════════════════════╣");
+        System.out.printf(   "║  Finished : %-49s║%n", new java.util.Date());
+        System.out.printf(   "║  Duration : %d min %d sec%-39s║%n", minutes, seconds, "");
+        System.out.println(  "╚══════════════════════════════════════════════════════════════╝\n");
+    }
+
+    // ========================
+    // Class-level Lifecycle
+    // ========================
+
+    /**
+     * Runs once before the first @Test in each test class (e.g. CartTests, CheckoutTests).
+     *
+     * <p>Logs the class name and environment to stdout and attaches
+     * them to the Allure report so every class run is clearly identified.</p>
+     */
+    @BeforeClass
+    public void classSetUp()
+    {
+        String className = getClass().getSimpleName();
+        String browser   = CONFIG.getProperty("browser",  "chrome");
+        String baseUrl   = CONFIG.getProperty("base.url", "https://automationexercise.com");
+        String headless  = CONFIG.getProperty("headless", "false");
+
+        System.out.println("  ╔══════════════════════════════════════════════════╗");
+        System.out.printf( "  ║  ▶ Starting : %-35s║%n", className);
+        System.out.printf( "  ║  Browser    : %-35s║%n", browser + " (headless=" + headless + ")");
+        System.out.printf( "  ║  URL        : %-35s║%n", baseUrl);
+        System.out.println("  ╚══════════════════════════════════════════════════╝");
+
+        Allure.description(
+                "**Class:** `" + className + "`  \n" +
+                        "**Browser:** "  + browser  + "  \n" +
+                        "**Headless:** " + headless + "  \n" +
+                        "**Base URL:** " + baseUrl
+        );
+    }
+
+    /**
+     * Runs once after the last @Test in each test class.
+     *
+     * <p>Prints a completion marker so the console log clearly shows
+     * where one test class ends and the next begins.</p>
+     */
+    @AfterClass
+    public void classTearDown()
+    {
+        String className = getClass().getSimpleName();
+
+        System.out.println("  ╔══════════════════════════════════════════════════╗");
+        System.out.printf( "  ║  ✔ Finished : %-35s║%n", className);
+        System.out.println("  ╚══════════════════════════════════════════════════╝\n");
+    }
+
+    // ========================
+    // Method-level Lifecycle
     // ========================
 
     /**
      * Runs before every {@code @Test} method.
      *
-     * <p>Creates a new {@link ASM_Framework} for the current thread,
-     * stores it in {@link #DRIVER_THREAD_LOCAL}, maximizes the window,
-     * and navigates to the configured base URL.</p>
+     * <p>Creates a fresh {@link ASM_Framework} for the current thread,
+     * maximizes the window, and navigates to the base URL.</p>
      */
     @BeforeMethod
     public void setUp()
@@ -156,10 +222,11 @@ public class BaseTest
      * Runs after every {@code @Test} method, regardless of pass or fail.
      *
      * <p>On failure: captures a screenshot and attaches it to Allure.</p>
-     * <p>Always: quits the browser and calls {@link ThreadLocal#remove()}
-     * to prevent memory leaks in long-running parallel suites.</p>
+     * <p>Always: navigates to blank to drain pending ad requests,
+     * quits the browser, and removes the driver from thread-local
+     * to prevent memory leaks.</p>
      *
-     * @param result TestNG result — used to detect failure and get the test name
+     * @param result TestNG result — used to detect failure and name the screenshot
      */
     @AfterMethod
     public void tearDown(ITestResult result)
@@ -182,10 +249,13 @@ public class BaseTest
                 }
             }
 
+            try { driver.goToURL("about:blank"); } // drain pending ad requests before quit
+            catch (Exception ignored) {}
+
             driver.closeAllTabs();
         }
 
-        DRIVER_THREAD_LOCAL.remove();   // prevent memory leak
+        DRIVER_THREAD_LOCAL.remove(); // prevent memory leak
     }
 
     // ========================

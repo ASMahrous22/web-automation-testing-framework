@@ -1,5 +1,9 @@
 package pages;
 
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import utils.AdsHelper;
 import utils.ASM_Framework;
 import utils.AllureHelper;
 
@@ -42,107 +46,53 @@ import java.io.IOException;
  * loginPage.driver.closeAllTabs();
  * }</pre>
  *
+ * Every interaction goes through AdsHelper so ads are killed before
  * @author ASMahrous
  */
+
 public class BasePage
 {
-    /** The framework driver — accessible directly from any page subclass or test. */
     public ASM_Framework driver;
 
-    // ========================
-    // Constructors
-    // ========================
+    public BasePage(ASM_Framework driver) { this.driver = driver; }
+    public BasePage(String browserName)   { this.driver = new ASM_Framework(browserName); }
+
+    // ── Convenience accessors ─────────────────────────────────────────────
+
+    protected WebDriver wd()              { return driver.getDriver(); }
+
+    // ── Ad-safe primitives used by every page subclass ────────────────────
+
+    /** Kill ads + JS click — use for ALL navigation / navbar links. */
+    protected void jsClick(By locator)    { AdsHelper.jsClick(wd(), locator); }
+
+    /** Kill ads + JS click on a WebElement directly. */
+    protected void jsClick(WebElement el) { AdsHelper.jsClick(wd(), el); }
 
     /**
-     * Primary constructor — used by all test classes.
-     * Receives the {@link ASM_Framework} instance that {@code BaseTest} created
-     * so the same browser session is shared for the full test method.
-     *
-     * @param driver the active {@link ASM_Framework} instance from {@code BaseTest}
+     * Kill ads + regular click with retry, JS click as last resort.
+     * Use for form buttons that are inside the page body (not nav links).
      */
-    public BasePage(ASM_Framework driver)
-    {
-        this.driver = driver;
-    }
+    protected void safeClick(By locator)  { AdsHelper.killAdsAndClick(wd(), locator); }
 
-    /**
-     * Standalone constructor — boots a fresh browser session for this page.
-     * Use this when running a page in isolation outside of a test class,
-     * e.g. for quick debugging or a standalone script.
-     *
-     * <p>Remember to call {@code driver.closeAllTabs()} when done.</p>
-     *
-     * @param browserName the browser to launch: {@code "chrome"}, {@code "firefox"},
-     *                    {@code "edge"}, or {@code "safari"}
-     */
-    public BasePage(String browserName)
-    {
-        this.driver = new ASM_Framework(browserName);
-    }
+    /** Kill ads then wait for element — use before every assertion. */
+    protected void waitFor(By locator)    { AdsHelper.waitForElement(wd(), locator); }
 
-    // ========================
-    // Common Page Methods
-    // ========================
+    /** Kill ads, wait, and return the element. */
+    protected WebElement waitAndGet(By locator) { return AdsHelper.waitForElementAndGet(wd(), locator); }
 
-    /**
-     * Returns the full URL of the current page.
-     *
-     * @return the current page URL string
-     */
-    public String readPageURL()
-    {
-        return driver.getCurrentPageURL();
-    }
+    /** Kill ads only — call before writing into a field. */
+    protected void killAds()             { AdsHelper.killAds(wd()); }
 
-    /**
-     * Returns {@code true} if the current URL contains {@code fragment}.
-     *
-     * @param fragment substring to look for in the current URL
-     * @return {@code true} if the URL contains {@code fragment}
-     */
-    public boolean urlContains(String fragment)
-    {
-        return driver.getCurrentPageURL().contains(fragment);
-    }
+    // ── URL / title helpers ───────────────────────────────────────────────
 
-    /**
-     * Returns {@code true} if the current page title contains {@code text}.
-     *
-     * @param text substring to look for in the page title
-     * @return {@code true} if the title contains {@code text}
-     */
-    public boolean titleContains(String text)
-    {
-        return driver.getCurrentPageTitle().contains(text);
-    }
+    public String  readPageURL()               { return driver.getCurrentPageURL(); }
+    public boolean urlContains(String fragment){ return driver.getCurrentPageURL().contains(fragment); }
+    public boolean titleContains(String text)  { return driver.getCurrentPageTitle().contains(text); }
+    public void    closePage()                 { driver.closeCurrentTab(); }
 
-    /**
-     * Closes the current browser tab.
-     */
-    public void closePage()
-    {
-        driver.closeCurrentTab();
-    }
+    // ── Screenshot ────────────────────────────────────────────────────────
 
-    // ========================
-    // Screenshots
-    // ========================
-
-    /**
-     * Captures a screenshot and attaches it to the active Allure test result.
-     *
-     * <p>Delegates to {@link AllureHelper#saveScreenshot(String, ASM_Framework)}
-     * which handles both saving the file to disk and streaming it into Allure.</p>
-     *
-     * <p>Example:</p>
-     * <pre>{@code
-     * loginPage.saveScreenshot("TC01_AfterLogin", driver);
-     * }</pre>
-     *
-     * @param fileName the attachment label shown in the Allure report
-     * @param driver   the active {@link ASM_Framework} instance
-     * @throws IOException if the screenshot file cannot be read
-     */
     public void saveScreenshot(String fileName, ASM_Framework driver) throws IOException
     {
         AllureHelper.saveScreenshot(fileName, driver);
